@@ -10,7 +10,7 @@ GRAMMAR = r"""
     program: "алг" IDENTIFIER ";" block "кон"
 
     // Блок программы
-    block: var_section? "кон" stmt_list
+    block: (var_section | func_section)* "кон" stmt_list
 
     // Раздел переменных
     var_section: "нач" var_decl_list
@@ -18,6 +18,15 @@ GRAMMAR = r"""
     var_decl_list: var_decl+
 
     var_decl: IDENTIFIER ":" type_spec ";"
+
+    // Раздел функций
+    func_section: "функции" func_decl+
+
+    func_decl: "функция" IDENTIFIER "(" param_list? ")" (":" type_spec)? ";" block "кон"
+
+    param_list: param ("," param)*
+
+    param: IDENTIFIER ":" type_spec
 
     // Типы
     type_spec: simple_type
@@ -154,18 +163,25 @@ class MelASTBuilder(Transformer):
     
     def block(self, items):
         var_decls = []
+        func_decls = []
         statements = []
         
         for item in items:
-            if isinstance(item, list) and len(item) > 0 and isinstance(item[0], VarDeclNode):
-                var_decls.extend(item)
-            elif isinstance(item, list):
-                statements.extend(item)
+            if isinstance(item, list) and len(item) > 0:
+                if isinstance(item[0], VarDeclNode):
+                    var_decls.extend(item)
+                elif isinstance(item[0], FuncDeclNode):
+                    func_decls.extend(item)
+                else:
+                    statements.extend(item)
             elif isinstance(item, VarDeclNode):
                 var_decls.append(item)
+            elif isinstance(item, FuncDeclNode):
+                func_decls.append(item)
             elif isinstance(item, StatementNode):
                 statements.append(item)
         
+        # Пока что игнорируем функции в BlockNode (можно расширить позже)
         return BlockNode(var_decls=var_decls, statements=statements)
     
     def var_section(self, items):
@@ -179,6 +195,50 @@ class MelASTBuilder(Transformer):
         return VarDeclNode(
             name=str(name_token),
             var_type=type_spec,
+            meta=self._get_position(name_token)
+        )
+    
+    def func_section(self, items):
+        return items  # Список функций
+    
+    def func_decl(self, items):
+        name_token = items[0]
+        params = []
+        return_type = None
+        block = None
+        
+        # Разбираем аргументы
+        current_idx = 1
+        if current_idx < len(items) and isinstance(items[current_idx], list):
+            # Есть параметры
+            params = items[current_idx]
+            current_idx += 1
+        
+        if current_idx < len(items) and hasattr(items[current_idx], '__class__') and 'TypeNode' in str(type(items[current_idx])):
+            # Есть тип возврата
+            return_type = items[current_idx]
+            current_idx += 1
+        
+        if current_idx < len(items):
+            # Блок функции
+            block = items[current_idx]
+        
+        return FuncDeclNode(
+            name=str(name_token),
+            params=params,
+            return_type=return_type,
+            block=block,
+            meta=self._get_position(name_token)
+        )
+    
+    def param_list(self, items):
+        return items
+    
+    def param(self, items):
+        name_token, param_type = items[0], items[1]
+        return ParamNode(
+            name=str(name_token),
+            param_type=param_type,
             meta=self._get_position(name_token)
         )
     
@@ -201,8 +261,12 @@ class MelASTBuilder(Transformer):
     
     def array_type(self, items):
         size_token, element_type = items[0], items[1]
-        # Создаем IntLiteralNode из токена INTEGER
-        size_expr = IntLiteralNode(value=int(size_token))
+        # size_token уже IntLiteralNode после трансформации
+        if isinstance(size_token, IntLiteralNode):
+            size_expr = size_token
+        else:
+            # Fallback если это ещё токен
+            size_expr = IntLiteralNode(value=int(size_token))
         return ArrayTypeNode(size=size_expr, element_type=element_type)
     
     # Операторы

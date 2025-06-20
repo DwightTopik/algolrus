@@ -3,6 +3,10 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+# Настройка кодировки для Windows
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+
 from mel_parser import parse, ParseError
 from mel_ast import ProgramNode
 
@@ -28,7 +32,16 @@ def cmd_parse(args):
         ast = parse(source)
         print("Парсинг успешен!")
         print("\nAST:")
-        print(ast.pretty())
+        
+        # Безопасный вывод AST
+        try:
+            ast_str = ast.pretty()
+            print(ast_str)
+        except Exception as e:
+            print(f"Ошибка при выводе AST: {e}")
+            print(f"AST тип: {type(ast)}")
+            print(f"AST имя: {getattr(ast, 'name', 'неизвестно')}")
+            
     except ParseError as e:
         print(f"Ошибка парсинга: {e}", file=sys.stderr)
         sys.exit(1)
