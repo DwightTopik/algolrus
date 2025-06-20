@@ -10,7 +10,7 @@ GRAMMAR = r"""
     program: "алг" IDENTIFIER ";" block "кон"
 
     // Блок программы
-    block: (var_section | func_section)* "кон" stmt_list
+    block: var_section? "кон" func_section? stmt_list
 
     // Раздел переменных
     var_section: "нач" var_decl_list
@@ -19,10 +19,18 @@ GRAMMAR = r"""
 
     var_decl: IDENTIFIER ":" type_spec ";"
 
-    // Раздел функций
-    func_section: "функции" func_decl+
+    // Раздел функций  
+    func_section: func_section_keyword func_decl+ "кон"
+    func_section_keyword: IDENTIFIER
 
-    func_decl: "функция" IDENTIFIER "(" param_list? ")" (":" type_spec)? ";" block "кон"
+    func_decl: func_keyword IDENTIFIER "(" param_list? ")" (":" type_spec)? ";" func_body_with_vars "кон"
+             | func_keyword IDENTIFIER "(" param_list? ")" (":" type_spec)? ";" func_body_no_vars "кон"
+             | func_keyword IDENTIFIER "(" param_list? ")" (":" type_spec)? ";" func_body_empty_vars "кон"
+    func_keyword: IDENTIFIER
+    
+    func_body_with_vars: "нач" var_decl_list "кон" stmt_list
+    func_body_no_vars: stmt_list
+    func_body_empty_vars: "кон" stmt_list
 
     param_list: param ("," param)*
 
@@ -43,7 +51,8 @@ GRAMMAR = r"""
     stmt_list: statement*
 
     // Операторы
-    statement: assignment ";"
+    statement: var_assignment ";"
+             | array_assignment ";"
              | if_stmt
              | for_stmt
              | while_stmt
@@ -53,8 +62,10 @@ GRAMMAR = r"""
              | return_stmt ";"
              | call_stmt ";"
 
-    assignment: expression ":=" expression
+    var_assignment: IDENTIFIER ASSIGN expression
+    array_assignment: IDENTIFIER "[" expression "]" ASSIGN expression
 
+    // Операторы
     if_stmt: "если" expression "то" stmt_list ("иначе" stmt_list)? "все"
 
     for_stmt: "для" IDENTIFIER "от" expression "до" expression ("шаг" expression)? stmt_list "кц"
@@ -113,12 +124,15 @@ GRAMMAR = r"""
     arg_list: expression ("," expression)*
 
     // Токены
-    IDENTIFIER: /[а-яёa-z_][а-яёa-z0-9_]*/i
+    ASSIGN: ":="
     INTEGER: /\d+/
     BOOLEAN: "да" | "нет"
     CHAR: /'([^'\\]|\\.)'/
     STRING: /"([^"\\]|\\.)*"/
-
+    
+    // IDENTIFIER
+    IDENTIFIER: /[а-яёa-z_][а-яёa-z0-9_]*/i
+    
     // Комментарии и пробелы
     COMMENT: "|" /[^\r\n]*/ 
     %import common.WS
@@ -167,13 +181,20 @@ class MelASTBuilder(Transformer):
         statements = []
         
         for item in items:
-            if isinstance(item, list) and len(item) > 0:
-                if isinstance(item[0], VarDeclNode):
-                    var_decls.extend(item)
-                elif isinstance(item[0], FuncDeclNode):
-                    func_decls.extend(item)
-                else:
-                    statements.extend(item)
+            if item is None:
+                # Пропускаем None (от опциональных правил)
+                continue
+            elif isinstance(item, list):
+                # Обрабатываем списки
+                if len(item) > 0:
+                    if isinstance(item[0], VarDeclNode):
+                        var_decls.extend(item)
+                    elif isinstance(item[0], FuncDeclNode):
+                        func_decls.extend(item)
+                    elif isinstance(item[0], StatementNode):
+                        statements.extend(item)
+                    else:
+                        statements.extend(item)
             elif isinstance(item, VarDeclNode):
                 var_decls.append(item)
             elif isinstance(item, FuncDeclNode):
@@ -181,8 +202,7 @@ class MelASTBuilder(Transformer):
             elif isinstance(item, StatementNode):
                 statements.append(item)
         
-        # Пока что игнорируем функции в BlockNode (можно расширить позже)
-        return BlockNode(var_decls=var_decls, statements=statements)
+        return BlockNode(var_decls=var_decls, func_decls=func_decls, statements=statements)
     
     def var_section(self, items):
         return items[0]  # var_decl_list
@@ -198,34 +218,48 @@ class MelASTBuilder(Transformer):
             meta=self._get_position(name_token)
         )
     
+    def func_section_keyword(self, items):
+        keyword = str(items[0])
+        if keyword != "функции":
+            raise ParseError(f"Ожидается 'функции', получено '{keyword}'")
+        return keyword
+    
+    def func_keyword(self, items):
+        keyword = str(items[0])
+        if keyword != "функция":
+            raise ParseError(f"Ожидается 'функция', получено '{keyword}'")
+        return keyword
+    
+
+    
     def func_section(self, items):
-        return items  # Список функций
+        # items[0] - ключевое слово "функции", items[1:] - список функций
+        # Последний элемент "кон" не передается в трансформер, поэтому берем все кроме первого
+        return items[1:]  # Возвращаем только список функций (исключаем ключевое слово)
     
     def func_decl(self, items):
-        name_token = items[0]
+        # items[0] - ключевое слово "функция", items[1] - имя функции
+        func_keyword = items[0]  # Уже проверено в func_keyword
+        name_token = items[1]
         params = []
         return_type = None
         block = None
         
-        # Разбираем аргументы
-        current_idx = 1
-        if current_idx < len(items) and isinstance(items[current_idx], list):
-            # Есть параметры
-            params = items[current_idx]
-            current_idx += 1
-        
-        if current_idx < len(items) and hasattr(items[current_idx], '__class__') and 'TypeNode' in str(type(items[current_idx])):
-            # Есть тип возврата
-            return_type = items[current_idx]
-            current_idx += 1
-        
-        if current_idx < len(items):
-            # Блок функции
-            block = items[current_idx]
+        # Простая логика: проходим по остальным элементам и определяем их тип
+        for item in items[2:]:
+            if isinstance(item, list):
+                # Список параметров
+                params = item
+            elif isinstance(item, TypeNode):
+                # Тип возврата
+                return_type = item
+            elif isinstance(item, BlockNode):
+                # Блок функции (func_body преобразуется в BlockNode)
+                block = item
         
         return FuncDeclNode(
             name=str(name_token),
-            params=params,
+            params=params or [],
             return_type=return_type,
             block=block,
             meta=self._get_position(name_token)
@@ -241,6 +275,22 @@ class MelASTBuilder(Transformer):
             param_type=param_type,
             meta=self._get_position(name_token)
         )
+    
+    def func_body_with_vars(self, items):
+        # items[0] - var_decl_list, items[1] - stmt_list
+        var_decls = items[0] if items[0] else []
+        statements = items[1] if items[1] else []
+        return BlockNode(var_decls=var_decls, statements=statements)
+    
+    def func_body_no_vars(self, items):
+        # items[0] - stmt_list
+        statements = items[0] if items else []
+        return BlockNode(statements=statements)
+    
+    def func_body_empty_vars(self, items):
+        # items[0] - stmt_list (после пустого "кон")
+        statements = items[0] if items else []
+        return BlockNode(statements=statements)
     
     # Добавляем правило для type_spec
     def type_spec(self, items):
@@ -276,9 +326,15 @@ class MelASTBuilder(Transformer):
     def statement(self, items):
         return items[0]  # Возвращаем первый элемент
     
-    def assignment(self, items):
-        target, value = items[0], items[1]
+    def var_assignment(self, items):
+        target_name, value = items[0], items[1]
+        target = IdentifierNode(name=str(target_name))
         return AssignNode(target=target, value=value)
+    
+    def array_assignment(self, items):
+        array_name, index, value = items[0], items[1], items[2]
+        array_node = IdentifierNode(name=str(array_name))
+        return AssignNode(target=ArrayAccessNode(array=array_node, index=index), value=value)
     
     def if_stmt(self, items):
         condition = items[0]

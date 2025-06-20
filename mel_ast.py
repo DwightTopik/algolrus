@@ -58,22 +58,31 @@ class ProgramNode(Node):
 
 
 class BlockNode(Node):
-    """Блок: раздел переменных + раздел операторов"""
+    """Блок: раздел переменных + раздел функций + раздел операторов"""
     
     def __init__(self, var_decls: List['VarDeclNode'] = None, 
+                 func_decls: List['FuncDeclNode'] = None,
                  statements: List['StatementNode'] = None,
                  meta: Optional[SourcePosition] = None):
         super().__init__(meta)
         self.var_decls = var_decls or []
+        self.func_decls = func_decls or []
         self.statements = statements or []
     
     def pretty(self, indent: int = 0) -> str:
         result = super().pretty(indent) + "\n"
         
+        # Выводим объявления переменных
         if self.var_decls:
             for var_decl in self.var_decls:
                 result += var_decl.pretty(indent + 1) + "\n"
+        
+        # Выводим объявления функций
+        if self.func_decls:
+            for func_decl in self.func_decls:
+                result += func_decl.pretty(indent + 1) + "\n"
                 
+        # Выводим операторы
         for stmt in self.statements:
             result += stmt.pretty(indent + 1) + "\n"
             
