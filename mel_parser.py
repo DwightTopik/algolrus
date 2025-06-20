@@ -93,16 +93,16 @@ GRAMMAR = r"""
             | comparison
 
     comparison: arith_expr (comp_op arith_expr)*
-
-    comp_op: "=" | "<>" | ">" | ">=" | "<" | "<="
+    
+    comp_op: COMP_OP
 
     arith_expr: term (add_op term)*
-
-    add_op: "+" | "-"
+    
+    add_op: ADD_OP
 
     term: factor (mul_op factor)*
-
-    mul_op: "*" | "/" | "div" | "mod"
+    
+    mul_op: MUL_OP
 
     factor: "+" factor     -> unary_plus
           | "-" factor     -> unary_minus
@@ -130,7 +130,12 @@ GRAMMAR = r"""
     CHAR: /'([^'\\]|\\.)'/
     STRING: /"([^"\\]|\\.)*"/
     
-    // IDENTIFIER
+    // Операторы как токены (должны быть перед IDENTIFIER)
+    COMP_OP: "=" | "<>" | ">" | ">=" | "<" | "<="
+    ADD_OP: "+" | "-"
+    MUL_OP.2: "*" | "/" | "div" | "mod"
+    
+    // IDENTIFIER (после операторов)
     IDENTIFIER: /[а-яёa-z_][а-яёa-z0-9_]*/i
     
     // Комментарии и пробелы
@@ -165,6 +170,24 @@ class MelASTBuilder(Transformer):
         elif hasattr(token_or_tree, 'meta') and token_or_tree.meta:
             return SourcePosition(token_or_tree.meta.line, token_or_tree.meta.column)
         return None
+    
+    def _convert_token_to_node(self, token):
+        """Преобразует токен Lark в узел AST"""
+        if not hasattr(token, 'type'):
+            return token
+            
+        if token.type == 'IDENTIFIER':
+            return IdentifierNode(name=str(token))
+        elif token.type == 'INTEGER':
+            return IntLiteralNode(value=int(token))
+        elif token.type == 'BOOLEAN':
+            return BoolLiteralNode(value=str(token) == "да")
+        elif token.type == 'CHAR':
+            return CharLiteralNode(value=str(token)[1:-1])
+        elif token.type == 'STRING':
+            return StringLiteralNode(value=str(token)[1:-1])
+        else:
+            return token
     
     # Программа и блоки
     def program(self, items):
@@ -327,13 +350,25 @@ class MelASTBuilder(Transformer):
         return items[0]  # Возвращаем первый элемент
     
     def var_assignment(self, items):
-        target_name, value = items[0], items[1]
+        # items = [IDENTIFIER, ASSIGN, expression]
+        target_name, assign_token, value = items[0], items[1], items[2]
         target = IdentifierNode(name=str(target_name))
+        value = self._convert_token_to_node(value)
         return AssignNode(target=target, value=value)
     
     def array_assignment(self, items):
-        array_name, index, value = items[0], items[1], items[2]
+        # items = [IDENTIFIER, "[", expression, "]", ASSIGN, expression]
+        # Но Lark может не передавать литеральные токены "[", "]", поэтому проверяем длину
+        if len(items) == 4:
+            # items = [IDENTIFIER, expression, ASSIGN, expression]
+            array_name, index, assign_token, value = items[0], items[1], items[2], items[3]
+        else:
+            # items = [IDENTIFIER, "[", expression, "]", ASSIGN, expression]
+            array_name, index, assign_token, value = items[0], items[2], items[4], items[5]
+        
         array_node = IdentifierNode(name=str(array_name))
+        index = self._convert_token_to_node(index)
+        value = self._convert_token_to_node(value)
         return AssignNode(target=ArrayAccessNode(array=array_node, index=index), value=value)
     
     def if_stmt(self, items):
@@ -408,27 +443,59 @@ class MelASTBuilder(Transformer):
     def arith_expr(self, items):
         return items[0] if len(items) == 1 else self._build_binary_chain(items)
     
+    def add_op(self, items):
+        # items[0] - это токен ADD_OP
+        return str(items[0])
+    
     def term(self, items):
         return items[0] if len(items) == 1 else self._build_binary_chain(items)
+    
+    def mul_op(self, items):
+        # items[0] - это токен MUL_OP
+        return str(items[0])
+    
+    def comp_op(self, items):
+        # items[0] - это токен COMP_OP
+        return str(items[0])
     
 
     
     def _build_binary_chain(self, items):
         """Строит цепочку бинарных операций"""
         if len(items) == 1:
-            return items[0]
+            return self._convert_token_to_node(items[0])
         
-        result = items[0]
+        result = self._convert_token_to_node(items[0])
         for i in range(1, len(items), 2):
             if i + 1 < len(items):
                 op_item = items[i]
-                right = items[i + 1]
+                right = self._convert_token_to_node(items[i + 1])
                 
-                # Извлекаем оператор из различных форматов Lark
-                op = self._extract_operator(op_item)
-                
-                # Отладка
-                # print(f"DEBUG: Building BinOp: left={type(result)}, op={op}, right={type(right)}")
+                # Извлекаем оператор
+                if isinstance(op_item, str):
+                    # Оператор уже строка (результат метода add_op, mul_op, comp_op)
+                    op = op_item
+                elif hasattr(op_item, 'data'):
+                    # Это дерево правила (add_op, mul_op, comp_op)
+                    # Нужно извлечь токен из дерева
+                    if op_item.children:
+                        op = str(op_item.children[0])
+                    else:
+                        # Fallback на основе типа правила
+                        if op_item.data == 'add_op':
+                            op = "+"
+                        elif op_item.data == 'mul_op':
+                            op = "*"
+                        elif op_item.data == 'comp_op':
+                            op = "="
+                        else:
+                            op = "?"
+                elif hasattr(op_item, 'value'):
+                    op = str(op_item.value)
+                elif hasattr(op_item, 'type'):
+                    op = str(op_item)
+                else:
+                    op = str(op_item)
                 
                 result = BinOpNode(left=result, op=op, right=right)
         return result
@@ -439,50 +506,58 @@ class MelASTBuilder(Transformer):
         if isinstance(op_item, str):
             return op_item
         
-        # Если это Token
+        # Если это Token с атрибутом value
         if hasattr(op_item, 'value'):
             return str(op_item.value)
         
-        # Если это Token без value (старый формат) 
+        # Если это Token с типом
         if hasattr(op_item, 'type'):
+            # Возвращаем сам токен как строку
             return str(op_item)
         
-        # Fallback - преобразуем в строку
+        # Если это Tree с данными (правило)
+        if hasattr(op_item, 'data'):
+            return str(op_item.data)
+        
+        # Fallback - преобразуем в строку и пытаемся извлечь
         op_str = str(op_item)
         
-        # Обрабатываем специальные случаи - ищем значение в кавычках
+        # Если это представление токена, извлекаем значение
         import re
+        
+        # Ищем токен в кавычках
         match = re.search(r"'([^']*)'", op_str)
         if match:
             return match.group(1)
         
-        # Если не нашли в кавычках, пробуем другие способы
-        if 'Token' in op_str:
-            # Извлекаем значение из строкового представления Token
-            if "'+'" in op_str or op_str.endswith('+'):
+        # Ищем простые операторы по ключевым словам
+        if 'add_op' in op_str:
+            if '+' in op_str:
                 return '+'
-            elif "'-'" in op_str or op_str.endswith('-'):
+            elif '-' in op_str:
                 return '-'
-            elif "'*'" in op_str or op_str.endswith('*'):
+        elif 'mul_op' in op_str:
+            if '*' in op_str:
                 return '*'
-            elif "'/'" in op_str or op_str.endswith('/'):
+            elif '/' in op_str:
                 return '/'
-            elif "'='" in op_str or op_str.endswith('='):
-                return '='
-            elif "'<>'" in op_str:
-                return '<>'
-            elif "'>'" in op_str and "'>='" not in op_str:
-                return '>'
-            elif "'>='" in op_str:
-                return '>='
-            elif "'<'" in op_str and "'<='" not in op_str and "'<>'" not in op_str:
-                return '<'
-            elif "'<='" in op_str:
-                return '<='
-            elif "'div'" in op_str or 'div' in op_str:
+            elif 'div' in op_str:
                 return 'div'
-            elif "'mod'" in op_str or 'mod' in op_str:
+            elif 'mod' in op_str:
                 return 'mod'
+        elif 'comp_op' in op_str:
+            if '<>' in op_str:
+                return '<>'
+            elif '>=' in op_str:
+                return '>='
+            elif '<=' in op_str:
+                return '<='
+            elif '>' in op_str:
+                return '>'
+            elif '<' in op_str:
+                return '<'
+            elif '=' in op_str:
+                return '='
         
         return op_str
     
@@ -500,24 +575,44 @@ class MelASTBuilder(Transformer):
     
     def _build_binary_chain_with_op(self, items, op):
         """Строит цепочку бинарных операций с одним оператором"""
-        result = items[0]
+        result = self._convert_token_to_node(items[0])
         for i in range(1, len(items)):
-            result = BinOpNode(left=result, op=op, right=items[i])
+            right = self._convert_token_to_node(items[i])
+            result = BinOpNode(left=result, op=op, right=right)
         return result
     
+
+    
+
+    
     def unary_not(self, items):
-        return UnaryOpNode(op="не", operand=items[0])
+        return UnaryOpNode(op="не", operand=self._convert_token_to_node(items[0]))
     
     def unary_plus(self, items):
-        return UnaryOpNode(op="+", operand=items[0])
+        return UnaryOpNode(op="+", operand=self._convert_token_to_node(items[0]))
     
     def unary_minus(self, items):
-        return UnaryOpNode(op="-", operand=items[0])
+        return UnaryOpNode(op="-", operand=self._convert_token_to_node(items[0]))
     
     def primary(self, items):
         item = items[0]
+        # Если это Token, обрабатываем его
+        if hasattr(item, 'type'):
+            if item.type == 'IDENTIFIER':
+                return IdentifierNode(name=str(item))
+            elif item.type == 'INTEGER':
+                return IntLiteralNode(value=int(item))
+            elif item.type == 'BOOLEAN':
+                value = str(item) == "да"
+                return BoolLiteralNode(value=value)
+            elif item.type == 'CHAR':
+                char_str = str(item)[1:-1]  # Убираем кавычки
+                return CharLiteralNode(value=char_str)
+            elif item.type == 'STRING':
+                string_str = str(item)[1:-1]  # Убираем кавычки
+                return StringLiteralNode(value=string_str)
         # Если это строка (IDENTIFIER), создаем узел
-        if isinstance(item, str):
+        elif isinstance(item, str):
             return IdentifierNode(name=item)
         return item
     
