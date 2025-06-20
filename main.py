@@ -65,8 +65,54 @@ def cmd_run(args):
 
 def cmd_compile(args):
     """Команда компиляции в байт-код VM"""
-    print("VM компилятор пока не реализован", file=sys.stderr)
-    sys.exit(1)
+    from vm_codegen import compile_to_vm
+    from vm_core import run_vm_program
+    
+    source = read_source_file(args.input)
+    
+    try:
+        ast = parse(source)
+        print(f"Компиляция программы '{ast.name}'...")
+        
+        # Генерируем байт-код
+        program = compile_to_vm(ast)
+        
+        if args.output:
+            # Сохраняем в файл
+            program.save_to_file(args.output)
+            print(f"Байт-код сохранен в '{args.output}'")
+        else:
+            # Выполняем сразу
+            print("Запуск скомпилированной программы...")
+            run_vm_program(program)
+            print("\nПрограмма завершена успешно.")
+        
+    except ParseError as e:
+        print(f"Ошибка парсинга: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Ошибка компиляции: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_vm(args):
+    """Команда запуска скомпилированного файла"""
+    from vm_core import VMProgram, run_vm_program
+    
+    try:
+        # Загружаем программу из файла
+        program = VMProgram.load_from_file(args.input)
+        
+        print(f"Запуск VM программы...")
+        run_vm_program(program)
+        print("\nПрограмма завершена успешно.")
+        
+    except FileNotFoundError:
+        print(f"Файл '{args.input}' не найден", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Ошибка выполнения: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def main():
@@ -79,6 +125,7 @@ def main():
   python main.py parse examples/hello.alg     # Парсинг и вывод AST
   python main.py run examples/hello.alg       # Запуск через интерпретатор
   python main.py compile examples/hello.alg   # Компиляция в байт-код VM
+  python main.py vm hello.avm                 # Запуск скомпилированного файла
         """
     )
     
@@ -99,6 +146,11 @@ def main():
     compile_parser.add_argument('input', help='Входной файл .alg')
     compile_parser.add_argument('-o', '--output', help='Выходной файл .avm')
     compile_parser.set_defaults(func=cmd_compile)
+    
+    # Команда vm
+    vm_parser = subparsers.add_parser('vm', help='Запуск скомпилированного файла')
+    vm_parser.add_argument('input', help='Входной файл .avm')
+    vm_parser.set_defaults(func=cmd_vm)
     
     args = parser.parse_args()
     
