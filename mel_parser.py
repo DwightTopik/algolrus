@@ -10,10 +10,10 @@ GRAMMAR = r"""
     program: "алг" IDENTIFIER ";" block "кон"
 
     // Блок программы
-    block: var_section? "кон" func_section? stmt_list
+    block: var_section? func_section? stmt_list
 
     // Раздел переменных
-    var_section: "нач" var_decl_list
+    var_section: "нач" var_decl_list "кон"
 
     var_decl_list: var_decl+
 
@@ -205,7 +205,7 @@ class MelASTBuilder(Transformer):
         return BlockNode(var_decls=var_decls, func_decls=func_decls, statements=statements)
     
     def var_section(self, items):
-        return items[0]  # var_decl_list
+        return items[0]  # var_decl_list (items[1] - это "кон")
     
     def var_decl_list(self, items):
         return items
@@ -411,6 +411,8 @@ class MelASTBuilder(Transformer):
     def term(self, items):
         return items[0] if len(items) == 1 else self._build_binary_chain(items)
     
+
+    
     def _build_binary_chain(self, items):
         """Строит цепочку бинарных операций"""
         if len(items) == 1:
@@ -425,6 +427,9 @@ class MelASTBuilder(Transformer):
                 # Извлекаем оператор из различных форматов Lark
                 op = self._extract_operator(op_item)
                 
+                # Отладка
+                # print(f"DEBUG: Building BinOp: left={type(result)}, op={op}, right={type(right)}")
+                
                 result = BinOpNode(left=result, op=op, right=right)
         return result
     
@@ -438,31 +443,60 @@ class MelASTBuilder(Transformer):
         if hasattr(op_item, 'value'):
             return str(op_item.value)
         
-        # Если это Token без value (старый формат)
+        # Если это Token без value (старый формат) 
         if hasattr(op_item, 'type'):
             return str(op_item)
         
-        # Если это Tree с data (правило грамматики)
-        if hasattr(op_item, 'data'):
-            # Извлекаем первый дочерний элемент
-            if hasattr(op_item, 'children') and op_item.children:
-                return str(op_item.children[0])
-            # Если детей нет, возвращаем дефолтный оператор по имени правила
-            elif op_item.data == 'add_op':
-                return '+'
-            elif op_item.data == 'mul_op':
-                return '*'
-            elif op_item.data == 'comp_op':
-                return '='
-        
         # Fallback - преобразуем в строку
-        return str(op_item)
+        op_str = str(op_item)
+        
+        # Обрабатываем специальные случаи - ищем значение в кавычках
+        import re
+        match = re.search(r"'([^']*)'", op_str)
+        if match:
+            return match.group(1)
+        
+        # Если не нашли в кавычках, пробуем другие способы
+        if 'Token' in op_str:
+            # Извлекаем значение из строкового представления Token
+            if "'+'" in op_str or op_str.endswith('+'):
+                return '+'
+            elif "'-'" in op_str or op_str.endswith('-'):
+                return '-'
+            elif "'*'" in op_str or op_str.endswith('*'):
+                return '*'
+            elif "'/'" in op_str or op_str.endswith('/'):
+                return '/'
+            elif "'='" in op_str or op_str.endswith('='):
+                return '='
+            elif "'<>'" in op_str:
+                return '<>'
+            elif "'>'" in op_str and "'>='" not in op_str:
+                return '>'
+            elif "'>='" in op_str:
+                return '>='
+            elif "'<'" in op_str and "'<='" not in op_str and "'<>'" not in op_str:
+                return '<'
+            elif "'<='" in op_str:
+                return '<='
+            elif "'div'" in op_str or 'div' in op_str:
+                return 'div'
+            elif "'mod'" in op_str or 'mod' in op_str:
+                return 'mod'
+        
+        return op_str
     
     def or_expr(self, items):
-        return items[0] if len(items) == 1 else self._build_binary_chain_with_op(items, "или")
+        if len(items) == 1:
+            return items[0]
+        else:
+            return self._build_binary_chain_with_op(items, "или")
     
     def and_expr(self, items):
-        return items[0] if len(items) == 1 else self._build_binary_chain_with_op(items, "и")
+        if len(items) == 1:
+            return items[0]
+        else:
+            return self._build_binary_chain_with_op(items, "и")
     
     def _build_binary_chain_with_op(self, items, op):
         """Строит цепочку бинарных операций с одним оператором"""
@@ -504,9 +538,9 @@ class MelASTBuilder(Transformer):
     def arg_list(self, items):
         return items
     
-    # Терминалы - возвращаем строки, а не узлы для использования в других правилах
+    # Терминалы - возвращаем узлы AST
     def IDENTIFIER(self, token):
-        return str(token)
+        return str(token)  # Оставляем как строку для использования в других правилах
     
     def INTEGER(self, token):
         return IntLiteralNode(value=int(token))
