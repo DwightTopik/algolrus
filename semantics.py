@@ -456,6 +456,17 @@ class SemanticAnalyzer:
     
     def visit_call_expr(self, node: CallNode) -> Optional[Type]:
         """Анализ вызова функции"""
+        # Специальная обработка для функции вывод
+        if node.name == "вывод":
+            if len(node.args) != 1:
+                self.add_error(f"Функция 'вывод' ожидает 1 аргумент, получено {len(node.args)}", node.meta)
+                return None
+            
+            # Вывод принимает любой тип
+            self.visit_expression(node.args[0])
+            node.type = VOID
+            return VOID
+        
         try:
             symbol = self.scope_manager.resolve(node.name, node.meta)
             

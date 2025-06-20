@@ -49,8 +49,18 @@ def cmd_parse(args):
 
 def cmd_run(args):
     """Команда запуска через интерпретатор"""
-    print("Интерпретатор пока не реализован", file=sys.stderr)
-    sys.exit(1)
+    from interpreter import run_program
+    
+    source = read_source_file(args.input)
+    
+    try:
+        ast = parse(source)
+        print(f"Запуск программы '{ast.name}'...")
+        run_program(ast)
+        print("\nПрограмма завершена успешно.")
+    except ParseError as e:
+        print(f"Ошибка парсинга: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def cmd_compile(args):

@@ -233,8 +233,8 @@ def get_default_value(type_obj: Type) -> Any:
 
 # Встроенные функции и их типы
 BUILTIN_FUNCTIONS = {
-    # Ввод-вывод
-    'вывод': FunctionType([STRING], VOID),
+    # Ввод-вывод (вывод принимает любой тип)
+    'вывод': None,  # Специальная обработка в семантическом анализе
     'выводстр': FunctionType([STRING], VOID),
     'ввод': FunctionType([INTEGER], VOID),  # Читает в переменную
     'вводстр': FunctionType([STRING], VOID),
