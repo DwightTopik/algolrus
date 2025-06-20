@@ -55,6 +55,14 @@ def cmd_run(args):
     
     try:
         ast = parse(source)
+        
+        # Оптимизация (если включена)
+        if hasattr(args, 'optimize') and args.optimize:
+            from optim import optimize_ast
+            ast, stats = optimize_ast(ast)
+            if hasattr(args, 'verbose') and args.verbose:
+                print(f"🔧 Применено оптимизаций: {stats.get('total', 0)}")
+        
         print(f"Запуск программы '{ast.name}'...")
         run_program(ast)
         print("\nПрограмма завершена успешно.")
@@ -74,8 +82,25 @@ def cmd_compile(args):
         ast = parse(source)
         print(f"Компиляция программы '{ast.name}'...")
         
+        # Оптимизация AST (если включена)
+        if hasattr(args, 'optimize') and args.optimize:
+            from optim import optimize_ast
+            ast, stats = optimize_ast(ast)
+            if hasattr(args, 'verbose') and args.verbose:
+                print(f"🔧 Применено AST оптимизаций: {stats.get('total', 0)}")
+        
         # Генерируем байт-код
         program = compile_to_vm(ast)
+        
+        # Peephole оптимизации байт-кода (если включена)
+        if hasattr(args, 'optimize') and args.optimize:
+            from optim import optimize_bytecode
+            original_size = len(program.code)
+            program, peephole_stats = optimize_bytecode(program)
+            optimized_size = len(program.code)
+            if hasattr(args, 'verbose') and args.verbose:
+                print(f"🔧 Peephole оптимизации: {peephole_stats.get('total', 0)}")
+                print(f"📊 Размер байт-кода: {original_size} → {optimized_size} (-{original_size - optimized_size})")
         
         if args.output:
             # Сохраняем в файл
@@ -84,7 +109,13 @@ def cmd_compile(args):
         else:
             # Выполняем сразу
             print("Запуск скомпилированной программы...")
-            run_vm_program(program)
+            output = run_vm_program(program)
+            
+            # Выводим результат выполнения
+            if output:
+                for line in output:
+                    print(line)
+            
             print("\nПрограмма завершена успешно.")
         
     except ParseError as e:
@@ -104,7 +135,13 @@ def cmd_vm(args):
         program = VMProgram.load_from_file(args.input)
         
         print(f"Запуск VM программы...")
-        run_vm_program(program)
+        output = run_vm_program(program)
+        
+        # Выводим результат выполнения
+        if output:
+            for line in output:
+                print(line)
+        
         print("\nПрограмма завершена успешно.")
         
     except FileNotFoundError:
@@ -139,12 +176,16 @@ def main():
     # Команда run
     run_parser = subparsers.add_parser('run', help='Запуск через интерпретатор')
     run_parser.add_argument('input', help='Входной файл .alg')
+    run_parser.add_argument('-O', '--optimize', action='store_true', help='Включить оптимизации')
+    run_parser.add_argument('-v', '--verbose', action='store_true', help='Подробный вывод')
     run_parser.set_defaults(func=cmd_run)
     
     # Команда compile
     compile_parser = subparsers.add_parser('compile', help='Компиляция в байт-код VM')
     compile_parser.add_argument('input', help='Входной файл .alg')
     compile_parser.add_argument('-o', '--output', help='Выходной файл .avm')
+    compile_parser.add_argument('-O', '--optimize', action='store_true', help='Включить оптимизации')
+    compile_parser.add_argument('-v', '--verbose', action='store_true', help='Подробный вывод')
     compile_parser.set_defaults(func=cmd_compile)
     
     # Команда vm

@@ -511,6 +511,159 @@ class ConstantFolder:
         return None
 
 
+class PeepholeOptimizer:
+    """Peephole оптимизатор для байт-кода виртуальной машины"""
+    
+    def __init__(self):
+        self.optimizations_count = 0
+    
+    def optimize(self, program) -> tuple:
+        """Применяет peephole оптимизации к программе VM"""
+        from vm_core import VMProgram, VMInstruction, OpCode
+        
+        self.optimizations_count = 0
+        optimized_code = []
+        i = 0
+        
+        while i < len(program.code):
+            # Пытаемся применить различные паттерны оптимизации
+            optimization_applied = False
+            
+            # Паттерн 1: PUSH x; POP → удаляем оба
+            if (i + 1 < len(program.code) and
+                program.code[i].opcode.value.startswith('PUSH') and
+                program.code[i + 1].opcode == OpCode.POP):
+                
+                # Пропускаем обе инструкции
+                i += 2
+                self.optimizations_count += 1
+                optimization_applied = True
+            
+            # Паттерн 2: PUSH 0; ADD → удаляем (x + 0 = x)
+            elif (i + 1 < len(program.code) and
+                  program.code[i].opcode == OpCode.PUSH_INT and
+                  program.code[i].arg == 0 and
+                  program.code[i + 1].opcode == OpCode.ADD):
+                
+                # Пропускаем обе инструкции
+                i += 2
+                self.optimizations_count += 1
+                optimization_applied = True
+            
+            # Паттерн 3: PUSH 1; MUL → удаляем (x * 1 = x)
+            elif (i + 1 < len(program.code) and
+                  program.code[i].opcode == OpCode.PUSH_INT and
+                  program.code[i].arg == 1 and
+                  program.code[i + 1].opcode == OpCode.MUL):
+                
+                # Пропускаем обе инструкции
+                i += 2
+                self.optimizations_count += 1
+                optimization_applied = True
+            
+            # Паттерн 4: PUSH 0; MUL → PUSH 0 (x * 0 = 0)
+            elif (i + 1 < len(program.code) and
+                  program.code[i].opcode == OpCode.PUSH_INT and
+                  program.code[i].arg == 0 and
+                  program.code[i + 1].opcode == OpCode.MUL):
+                
+                # Заменяем на одну инструкцию PUSH 0
+                optimized_code.append(VMInstruction(OpCode.PUSH_INT, 0))
+                i += 2
+                self.optimizations_count += 1
+                optimization_applied = True
+            
+            # Паттерн 5: PUSH 1; DIV → удаляем (x / 1 = x)
+            elif (i + 1 < len(program.code) and
+                  program.code[i].opcode == OpCode.PUSH_INT and
+                  program.code[i].arg == 1 and
+                  program.code[i + 1].opcode == OpCode.DIV):
+                
+                # Пропускаем обе инструкции
+                i += 2
+                self.optimizations_count += 1
+                optimization_applied = True
+            
+            # Паттерн 6: PUSH x; PUSH y; ADD → PUSH (x+y) если x,y константы
+            elif (i + 2 < len(program.code) and
+                  program.code[i].opcode == OpCode.PUSH_INT and
+                  program.code[i + 1].opcode == OpCode.PUSH_INT and
+                  program.code[i + 2].opcode == OpCode.ADD):
+                
+                # Вычисляем сумму
+                result = program.code[i].arg + program.code[i + 1].arg
+                optimized_code.append(VMInstruction(OpCode.PUSH_INT, result))
+                i += 3
+                self.optimizations_count += 1
+                optimization_applied = True
+            
+            # Паттерн 7: PUSH x; PUSH y; SUB → PUSH (x-y)
+            elif (i + 2 < len(program.code) and
+                  program.code[i].opcode == OpCode.PUSH_INT and
+                  program.code[i + 1].opcode == OpCode.PUSH_INT and
+                  program.code[i + 2].opcode == OpCode.SUB):
+                
+                # Вычисляем разность
+                result = program.code[i].arg - program.code[i + 1].arg
+                optimized_code.append(VMInstruction(OpCode.PUSH_INT, result))
+                i += 3
+                self.optimizations_count += 1
+                optimization_applied = True
+            
+            # Паттерн 8: PUSH x; PUSH y; MUL → PUSH (x*y)
+            elif (i + 2 < len(program.code) and
+                  program.code[i].opcode == OpCode.PUSH_INT and
+                  program.code[i + 1].opcode == OpCode.PUSH_INT and
+                  program.code[i + 2].opcode == OpCode.MUL):
+                
+                # Вычисляем произведение
+                result = program.code[i].arg * program.code[i + 1].arg
+                optimized_code.append(VMInstruction(OpCode.PUSH_INT, result))
+                i += 3
+                self.optimizations_count += 1
+                optimization_applied = True
+            
+            # Паттерн 9: JMP_IF_FALSE next; JMP target; next: → JMP_IF_TRUE target
+            elif (i + 1 < len(program.code) and
+                  program.code[i].opcode == OpCode.JMP_IF_FALSE and
+                  program.code[i + 1].opcode == OpCode.JMP and
+                  program.code[i].arg == i + 2):  # JMP_IF_FALSE указывает на следующую инструкцию
+                
+                # Инвертируем условие и меняем адрес
+                optimized_code.append(VMInstruction(OpCode.JMP_IF_TRUE, program.code[i + 1].arg))
+                i += 2
+                self.optimizations_count += 1
+                optimization_applied = True
+            
+            # Паттерн 10: Последовательные NOP → удаляем
+            elif program.code[i].opcode == OpCode.NOP:
+                # Пропускаем NOP
+                i += 1
+                self.optimizations_count += 1
+                optimization_applied = True
+            
+            # Если оптимизация не применена, копируем инструкцию как есть
+            if not optimization_applied:
+                optimized_code.append(program.code[i])
+                i += 1
+        
+        # Создаем оптимизированную программу
+        optimized_program = VMProgram(
+            constants=program.constants,
+            code=optimized_code,
+            globals_count=program.globals_count
+        )
+        
+        return optimized_program, self.get_stats()
+    
+    def get_stats(self) -> dict:
+        """Возвращает статистику peephole оптимизаций"""
+        return {
+            "peephole": self.optimizations_count,
+            "total": self.optimizations_count
+        }
+
+
 def optimize_ast(ast: ProgramNode, enable_constant_folding: bool = True) -> tuple[ProgramNode, dict]:
     """
     Применяет оптимизации к AST
@@ -527,7 +680,24 @@ def optimize_ast(ast: ProgramNode, enable_constant_folding: bool = True) -> tupl
     return optimized_ast, stats
 
 
+def optimize_bytecode(program, enable_peephole: bool = True) -> tuple:
+    """
+    Применяет оптимизации к байт-коду
+    Возвращает оптимизированную программу и статистику оптимизаций
+    """
+    optimized_program = program
+    stats = {}
+    
+    if enable_peephole:
+        optimizer = PeepholeOptimizer()
+        optimized_program, peephole_stats = optimizer.optimize(optimized_program)
+        stats.update(peephole_stats)
+    
+    return optimized_program, stats
+
+
 # Экспорт
 __all__ = [
-    'OptimizationError', 'ConstantFolder', 'optimize_ast'
+    'OptimizationError', 'ConstantFolder', 'PeepholeOptimizer', 
+    'optimize_ast', 'optimize_bytecode'
 ]
