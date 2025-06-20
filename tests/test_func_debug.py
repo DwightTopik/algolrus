@@ -1,6 +1,9 @@
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import mel_parser
 
-# Принудительно сбрасываем кэш
+                              
 mel_parser._parser = None
 
 try:

@@ -3,7 +3,7 @@ print("Testing simple parse...")
 try:
     from lark import Lark
     
-    # Простейшая грамматика для теста
+                                     
     simple_grammar = '''
     program: "алг" IDENTIFIER ";" "кон" "кон"
     IDENTIFIER: /[а-яё_][а-яё0-9_]*/i

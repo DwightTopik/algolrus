@@ -1,10 +1,13 @@
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import mel_parser
 import importlib
 
-# Принудительно сбрасываем кэш
+                              
 mel_parser._parser = None
 
-# Перезагружаем модуль
+                      
 importlib.reload(mel_parser)
 
 try:
@@ -16,10 +19,10 @@ try:
     print("\n" + "="*50 + "\n")
     
     ast = mel_parser.parse(source)
-    print("🎉 УСПЕХ! Простая функция работает!")
+    print(" УСПЕХ! Простая функция работает!")
     print(f"Количество функций: {len(ast.block.func_decls)}")
     
 except Exception as e:
-    print(f"❌ Ошибка: {e}")
+    print(f" Ошибка: {e}")
     import traceback
     traceback.print_exc() 

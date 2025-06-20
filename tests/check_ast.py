@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from mel_parser import parse
 
 try:
@@ -13,7 +16,7 @@ try:
     print(f"Количество операторов: {len(ast.block.statements)}")
     
     print("\nПеременные:")
-    for var in ast.block.var_decls[:5]:  # Первые 5
+    for var in ast.block.var_decls[:5]:            
         print(f"  {var.name}: {var.var_type}")
         
     print("\nПервые 5 операторов:")
@@ -21,7 +24,7 @@ try:
         print(f"  {i+1}. {type(stmt).__name__}")
         
     print(f"\n... и ещё {len(ast.block.statements) - 5} операторов")
-    print("✅ AST корректно построен!")
+    print(" AST корректно построен!")
     
 except Exception as e:
     print(f"Ошибка: {e}")

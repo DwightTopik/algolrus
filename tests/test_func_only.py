@@ -1,6 +1,6 @@
 from lark import Lark
 
-# Грамматика только для секции функций
+                                      
 func_only_grammar = '''
 start: func_section
 
@@ -37,7 +37,7 @@ try:
     parser = Lark(func_only_grammar, start='start', parser='lalr')
     print("Парсер создан успешно")
     
-    # Тестируем секцию функций - простейший случай
+                                                  
     test_code = '''функции
     функция тест();
     кон

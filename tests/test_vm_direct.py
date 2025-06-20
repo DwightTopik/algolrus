@@ -1,11 +1,14 @@
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import json
 from vm_core import VMProgram, run_vm_program
 
-# Загружаем hello.avm и запускаем
+                                 
 try:
     print("Загружаем hello.avm...")
     
-    # Сначала загружаем JSON вручную
+                                    
     print("Читаем файл...")
     with open("hello.avm", 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -14,7 +17,7 @@ try:
     print(f"Ключи: {data.keys()}")
     print(f"Количество инструкций: {len(data['code'])}")
     
-    # Теперь создаем программу
+                              
     print("Создаем VMProgram...")
     program = VMProgram.from_dict(data)
     

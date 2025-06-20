@@ -1,6 +1,6 @@
 from lark import Lark
 
-# Рабочая грамматика для функций
+                                
 working_grammar = '''
 start: program
 
@@ -42,7 +42,7 @@ IDENTIFIER: /[а-яёa-z_][а-яёa-z0-9_]*/i
 %ignore WS
 '''
 
-# Трансформер с проверками
+                          
 class TestTransformer:
     def func_section_keyword(self, items):
         keyword = str(items[0])
@@ -60,7 +60,7 @@ try:
     parser = Lark(working_grammar, start='start', parser='lalr')
     print("Парсер создан успешно")
     
-    # Простейший тест
+                     
     test_code = '''алг тест;
 нач
     а : цел;
@@ -77,10 +77,10 @@ try:
     print("\n" + "="*50 + "\n")
     
     tree = parser.parse(test_code)
-    print("✅ Парсинг успешен!")
+    print(" Парсинг успешен!")
     print("Дерево разбора:", tree)
     
 except Exception as e:
-    print(f"❌ Ошибка: {e}")
+    print(f" Ошибка: {e}")
     import traceback
     traceback.print_exc() 
