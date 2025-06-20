@@ -1,5 +1,9 @@
 import sys
 import os
+
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 print("Тест импорта vm_core...")
 
@@ -15,6 +19,19 @@ try:
     print("Импортируем run_vm_program...")
     from vm_core import run_vm_program
     print("run_vm_program импортирован")
+    
+    print("Тестируем создание простой VM программы...")
+    from vm_core import VMInstruction, OpCode
+    
+    program = VMProgram(
+        constants=[42],
+        code=[
+            VMInstruction(OpCode.PUSH_INT, 42),
+            VMInstruction(OpCode.HALT)
+        ],
+        globals_count=0
+    )
+    print("VMProgram создан")
     
     print("Все импорты успешны!")
     

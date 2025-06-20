@@ -1,4 +1,3 @@
-
 from typing import List, Dict, Any, Optional, Union
 from mel_ast import *
 from mel_types import *
@@ -51,6 +50,7 @@ class VMCodeGenerator:
 
 
         self.functions: Dict[str, int] = {}
+        self.function_info: Dict[str, Dict[str, int]] = {}  # Информация о функциях (количество локальных переменных и параметров)
         self.current_function: Optional[str] = None
 
     def generate(self, ast: ProgramNode) -> VMProgram:
@@ -88,6 +88,7 @@ class VMCodeGenerator:
         self.break_labels.clear()
         self.continue_labels.clear()
         self.functions.clear()
+        self.function_info.clear()
 
         self.globals_count = 0
         self.locals_count = 0
@@ -197,24 +198,59 @@ class VMCodeGenerator:
         self.functions[node.name] = -1
 
     def visit_func_decl(self, node: FuncDeclNode):
-
+        # Сохраняем адрес функции
         func_address = len(self.instructions)
         self.functions[node.name] = func_address
 
         old_function = self.current_function
         self.current_function = node.name
+        
+        # Сохраняем текущее состояние локальных переменных
+        old_locals = self.local_vars.copy()
+        old_locals_count = self.locals_count
+        
+        # Сбрасываем локальные переменные для функции
+        self.local_vars.clear()
+        self.locals_count = 0
+        
+        # Добавляем параметры как локальные переменные
+        for param in node.params:
+            self.local_vars[param.name] = self.locals_count
+            self.locals_count += 1
 
+        # Добавляем локальные переменные функции (не параметры)
+        for var_decl in node.block.var_decls:
+            self.local_vars[var_decl.name] = self.locals_count
+            self.locals_count += 1
 
-        self.visit_block(node.block, is_global=False)
+        # Сохраняем общее количество локальных переменных для этой функции
+        total_locals = self.locals_count
+        self.function_info[node.name] = {
+            'total_locals': total_locals,
+            'num_params': len(node.params)
+        }
+        
+        # Генерируем код инициализации локальных переменных (не параметров)
+        for var_decl in node.block.var_decls:
+            # Инициализируем локальную переменную значением по умолчанию
+            default_value = self.get_default_value_for_type(var_decl.var_type)
+            self.emit_literal(default_value)
+            self.emit(OpCode.STORE_LOCAL, self.local_vars[var_decl.name])
+        
+        for stmt in node.block.statements:
+            self.visit_statement(stmt)
 
-
+        # Если функция не возвращает значение, добавляем RETURN
         if not node.return_type:
-
+            # Процедура
             self.emit(OpCode.RETURN)
         else:
-
+            # Функция - RETURN должен быть в коде
             pass
 
+        # Восстанавливаем состояние
+        self.local_vars = old_locals
+        self.locals_count = old_locals_count
         self.current_function = old_function
 
     def get_default_value_for_type(self, type_node: TypeNode) -> Any:
@@ -684,13 +720,14 @@ class VMCodeGenerator:
                 raise CodeGenError(f"Неизвестная функция: {node.name}", node.meta)
 
 
-            for arg in node.args:
+            # Помещаем аргументы на стек (в обратном порядке, чтобы первый аргумент был сверху)
+            for arg in reversed(node.args):
                 self.visit_expression(arg)
 
-
+            # Вызываем функцию
             func_addr = self.functions[node.name]
-            num_locals = 0
-            self.emit(OpCode.CALL, (func_addr, num_locals))
+            func_info = self.function_info[node.name]
+            self.emit(OpCode.CALL, (func_addr, func_info['num_params'], func_info['total_locals']))
 
     def emit_literal(self, value: Any):
         if isinstance(value, int):

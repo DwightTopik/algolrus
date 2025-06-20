@@ -322,10 +322,24 @@ class VirtualMachine:
 
         elif opcode == OpCode.CALL:
 
-            func_addr, num_locals = arg
-
+            if len(arg) == 3:
+                func_addr, num_params, total_locals = arg
+            else:
+                # Обратная совместимость
+                func_addr, num_params = arg
+                total_locals = num_params
+            
+            # Извлекаем аргументы из стека
+            args = []
+            for _ in range(num_params):
+                args.append(self.pop())
+            
+            # Дополняем локальные переменные до нужного количества
+            locals_list = args + [self.get_default_value()] * (total_locals - num_params)
+            
+            # Создаем новый фрейм с аргументами как локальными переменными
             frame = CallFrame(
-                locals=[self.get_default_value()] * num_locals,
+                locals=locals_list,
                 return_address=self.ip + 1
             )
             self.call_stack.append(frame)

@@ -1,12 +1,12 @@
-
-
-
-
 import subprocess
 import sys
 import tempfile
 import os
 from pathlib import Path
+
+# Настройка кодировки для Windows
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
 
 def create_test_program():
     return '''алг финальный_тест;

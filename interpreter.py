@@ -377,7 +377,7 @@ class Interpreter:
 
 
         old_env = self.current_env
-        self.current_env = Environment(parent=self.global_env)
+        self.current_env = Environment(parent=old_env)
 
         try:
 

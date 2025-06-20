@@ -1,11 +1,11 @@
-
-
-
-
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import sys
-sys.stdout.reconfigure(encoding='utf-8')
+import os
+
+# Настройка кодировки для Windows
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from pathlib import Path
 from mel_parser import parse

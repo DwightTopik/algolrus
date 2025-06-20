@@ -1,10 +1,10 @@
-
-
-
-
 import subprocess
 import sys
 import os
+
+# Настройка кодировки для Windows
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8')
 
 def run_test(test_name, test_file):
     print(f"\n{'='*60}")
