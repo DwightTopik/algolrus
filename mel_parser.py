@@ -26,8 +26,9 @@ GRAMMAR = r"""
     simple_type: "цел"      -> integer_type
                | "лог"      -> boolean_type
                | "сим"      -> char_type
+               | "строка"   -> string_type
 
-    array_type: "таб" "[" INTEGER "]" type_spec
+    array_type: "таб" "[" INTEGER "]" simple_type
 
     // Список операторов
     stmt_list: statement*
@@ -38,8 +39,8 @@ GRAMMAR = r"""
              | for_stmt
              | while_stmt
              | do_while_stmt
-             | break_stmt ";"
-             | continue_stmt ";"
+             | break_stmt
+             | continue_stmt
              | return_stmt ";"
              | call_stmt ";"
 
@@ -51,7 +52,7 @@ GRAMMAR = r"""
 
     while_stmt: "пока" expression stmt_list "кц"
 
-    do_while_stmt: "цикл" stmt_list "пока" expression
+    do_while_stmt: "цикл" stmt_list "до" expression
 
     break_stmt: "стоп"
 
@@ -194,6 +195,9 @@ class MelASTBuilder(Transformer):
     
     def char_type(self, items):
         return SimpleTypeNode(name="сим")
+    
+    def string_type(self, items):
+        return SimpleTypeNode(name="строка")
     
     def array_type(self, items):
         size_token, element_type = items[0], items[1]
